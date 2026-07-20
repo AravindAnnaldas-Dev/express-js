@@ -14,11 +14,22 @@ route.post("/register", async (req, res) => {
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    res.status(201).json({
-      username,
-      password,
-      hashedPassword,
-    });
+    pool.query(
+      "INSERT INTO users (username, password) VALUES ($1, $2)",
+      [username, hashedPassword],
+      (err, result) => {
+        if (err) {
+          console.error("Error inserting user:", err);
+          return res.status(500).json({ message: "Failed to register user." });
+        }
+
+        console.log("User inserted successfully.");
+
+        return res
+          .status(201)
+          .json({ message: "User registered successfully." });
+      },
+    );
   } catch (error) {
     console.log(error);
     res.status(500).json({
@@ -30,7 +41,7 @@ route.post("/register", async (req, res) => {
 route.get("/", async (req, res) => {
   try {
     const result = await pool.query("SELECT * FROM users");
-    res.status(200).json(result.rows);
+    return res.status(200).json(result.rows);
   } catch (error) {
     console.log(error);
     res.status(500).json({
