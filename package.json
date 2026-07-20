@@ -1,6 +1,25 @@
 {
+  "name": "express",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AravindAnnaldas-Dev/express-js.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/AravindAnnaldas-Dev/express-js/issues"
+  },
+  "homepage": "https://github.com/AravindAnnaldas-Dev/express-js#readme",
   "dependencies": {
-    "express": "^5.2.1",
+    "express": "^5.2.1"
+  },
+  "devDependencies": {
     "nodemon": "^3.1.14"
   }
 }
