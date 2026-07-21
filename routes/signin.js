@@ -1,4 +1,5 @@
 import express from "express";
+import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import { pool } from "../db.js";
 
@@ -27,7 +28,16 @@ signInRoute.post("/signin", async (req, res) => {
     const isMatched = await bcrypt.compare(password, user.password);
 
     if (isMatched) {
-      return res.status(200).json({ message: "Successfully logged in." });
+      const token = jwt.sign(
+        { email, id: user.id },
+        process.env.JWT_SECRET_TOKEN,
+        {
+          expiresIn: "2m",
+        },
+      );
+      return res
+        .status(200)
+        .json({ message: "Successfully logged in.", token });
     } else {
       return res.status(401).json({ message: "Invalid email or password." });
     }
