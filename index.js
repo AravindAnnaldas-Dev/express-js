@@ -1,7 +1,8 @@
 import "./env.js";
 import express from "express";
 import cors from "cors";
-import { route } from "./routes/users.js";
+import { signUpRoute } from "./routes/signup.js";
+import { signInRoute } from "./routes/signin.js";
 import { checkDbConnection } from "./db.js";
 
 const app = express();
@@ -9,7 +10,8 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.use("/api/users", route);
+app.use("/api", signUpRoute);
+app.use("/api", signInRoute);
 
 const PORT = process.env.PORT || 3001;
 
