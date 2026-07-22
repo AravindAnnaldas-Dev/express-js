@@ -2,7 +2,7 @@ import "./src/config/env.js";
 import { app } from "./src/app.js";
 import { checkDbConnection } from "./src/config/db.js";
 
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3002;
 
 const startServer = async () => {
   const isDbConnected = await checkDbConnection();
