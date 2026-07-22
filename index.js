@@ -1,20 +1,6 @@
-import "./env.js";
-import express from "express";
-import cors from "cors";
-import { signUpRoute } from "./routes/signup.js";
-import { signInRoute } from "./routes/signin.js";
-import { usersListRoute } from "./routes/userslist.js";
-import { checkDbConnection } from "./db.js";
-import { authenticate } from "./jwtmiddleware.js";
-
-const app = express();
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-app.use("/api", signUpRoute);
-app.use("/api", signInRoute);
-app.use("/api", authenticate, usersListRoute);
+import "./src/config/env.js";
+import { app } from "./src/app.js";
+import { checkDbConnection } from "./src/config/db.js";
 
 const PORT = process.env.PORT || 3001;
 

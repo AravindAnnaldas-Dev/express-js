@@ -1,8 +1,6 @@
-import express from "express";
-import { pool } from "../db.js";
-export const usersListRoute = express.Router();
+import { pool } from "../config/db.js";
 
-usersListRoute.get("/users", async (req, res) => {
+export const getUsersList = async (req, res) => {
   try {
     const result = await pool.query("SELECT id, username, email FROM users");
     const usersList = result.rows;
@@ -14,4 +12,4 @@ usersListRoute.get("/users", async (req, res) => {
     console.log(error);
     return res.status(500).json({ message: "Database Error" });
   }
-});
+};
