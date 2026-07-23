@@ -18,16 +18,6 @@ export const signUp = async (req, res) => {
   }
 
   try {
-    const existing = await pool.query("SELECT * FROM users WHERE email = $1", [
-      email,
-    ]);
-
-    if (existing.rows.length > 0) {
-      return res
-        .status(409)
-        .json({ message: "User with this email already exists." });
-    }
-
     const hashedPassword = await bcrypt.hash(password, 10);
 
     await pool.query(
@@ -39,6 +29,11 @@ export const signUp = async (req, res) => {
       .status(201)
       .json({ status_code: 201, message: "User registered successfully." });
   } catch (error) {
+    if (error.code === "23505") {
+      return res
+        .status(409)
+        .json({ message: "User with this email already exists." });
+    }
     console.log(error);
     return res.status(500).json({
       message: "Database Error",
@@ -63,6 +58,12 @@ export const signIn = async (req, res) => {
     const user = existing.rows[0];
     if (!user) {
       return res.status(401).json({ message: "Invalid email or password." });
+    }
+
+    if (!user.password) {
+      return res.status(401).json({
+        message: "This account uses Google Sign-In. Please log in with Google.",
+      });
     }
 
     const isMatched = await bcrypt.compare(password, user.password);
@@ -101,32 +102,36 @@ export const googleAuth = async (req, res) => {
         audience: process.env.GOOGLE_CLIENT_ID,
       });
       const payload = ticket.getPayload();
+
+      if (!payload.email_verified) {
+        return res.status(401).json({ message: "Email is not verified." });
+      }
+
       const email = payload["email"];
 
-      const existing = await pool.query(
-        "SELECT * FROM users WHERE email = $1",
-        [email],
-      );
-
       let userId;
-      let username;
       let statusCode;
       let message;
 
-      if (existing.rows.length > 0) {
-        userId = existing.rows[0].id;
-        username = existing.rows[0].username;
-        statusCode = 200;
-        message = "Successfully logged in.";
-      } else {
-        username = payload["given_name"];
+      try {
         const inserted = await pool.query(
           "INSERT INTO users (username, email, provider) VALUES ($1, $2, $3) RETURNING id",
-          [username, email, "google"],
+          [payload["given_name"], email, "google"],
         );
         userId = inserted.rows[0].id;
         statusCode = 201;
         message = "User registered successfully.";
+      } catch (error) {
+        if (error.code !== "23505") {
+          throw error;
+        }
+        const existing = await pool.query(
+          "SELECT id FROM users WHERE email = $1",
+          [email],
+        );
+        userId = existing.rows[0].id;
+        statusCode = 200;
+        message = "Successfully logged in.";
       }
 
       const token = jwt.sign(
@@ -143,8 +148,8 @@ export const googleAuth = async (req, res) => {
         token,
       });
     } else {
-      return res.status(401).json({
-        message: "Invalid or expired token.",
+      return res.status(400).json({
+        message: "idToken is missing.",
       });
     }
   } catch (error) {

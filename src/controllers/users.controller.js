@@ -2,7 +2,9 @@ import { pool } from "../config/db.js";
 
 export const getUsersList = async (req, res) => {
   try {
-    const result = await pool.query("SELECT id, username, email FROM users");
+    const result = await pool.query(
+      "SELECT username, email, provider FROM users",
+    );
     const usersList = result.rows;
 
     return res.status(200).json({
