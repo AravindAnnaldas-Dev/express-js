@@ -109,73 +109,75 @@ export const signIn = async (req, res) => {
 export const googleAuth = async (req, res) => {
   const { idToken } = req.body;
 
+  if (!idToken) {
+    return res.status(400).json({
+      message: "idToken is missing.",
+    });
+  }
+
+  let payload;
   try {
-    if (idToken) {
-      const ticket = await client.verifyIdToken({
-        idToken,
-        audience: process.env.GOOGLE_CLIENT_ID,
-      });
-      const payload = ticket.getPayload();
+    const ticket = await client.verifyIdToken({
+      idToken,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    payload = ticket.getPayload();
+  } catch (error) {
+    return res.status(401).json({ message: "Invalid Google token." });
+  }
 
-      if (!payload.email_verified) {
-        return res.status(401).json({ message: "Email is not verified." });
-      }
+  if (!payload.email_verified) {
+    return res.status(401).json({ message: "Email is not verified." });
+  }
 
-      const email = payload["email"];
+  try {
+    const email = payload["email"];
 
-      let userId;
-      let statusCode;
-      let message;
+    let userId;
+    let statusCode;
+    let message;
 
-      try {
-        const inserted = await pool.query(
-          "INSERT INTO users (username, email, provider) VALUES ($1, $2, $3) RETURNING id",
-          [payload["given_name"], email, "google"],
-        );
-        userId = inserted.rows[0].id;
-        statusCode = 201;
-        message = "User registered successfully.";
-      } catch (error) {
-        if (error.code !== "23505") {
-          throw error;
-        }
-        const existing = await pool.query(
-          "SELECT id FROM users WHERE email = $1",
-          [email],
-        );
-        userId = existing.rows[0].id;
-        statusCode = 200;
-        message = "Successfully logged in.";
-      }
+    const existing = await pool.query(
+      "SELECT id FROM users WHERE email = $1",
+      [email],
+    );
 
-      const token = jwt.sign(
-        { email, id: user.id },
-        process.env.JWT_SECRET_TOKEN,
-        {
-          expiresIn: process.env.ACCESS_EXPIRY,
-        },
-      );
-      const refresh = jwt.sign(
-        { email, id: user.id },
-        process.env.REFRESH_TOKEN_SECRET,
-        {
-          expiresIn: process.env.REFRESH_EXPIRY,
-        },
-      );
-
-      await pool.query("INSERT INTO users (token) VALUES ($1)", [refresh]);
-
-      return res.status(statusCode).json({
-        status_code: statusCode,
-        message,
-        token,
-        refresh,
-      });
+    if (existing.rows[0]) {
+      userId = existing.rows[0].id;
+      statusCode = 200;
+      message = "Successfully logged in.";
     } else {
-      return res.status(400).json({
-        message: "idToken is missing.",
-      });
+      const inserted = await pool.query(
+        "INSERT INTO users (username, email, provider) VALUES ($1, $2, $3) RETURNING id",
+        [payload["given_name"], email, "google"],
+      );
+      userId = inserted.rows[0].id;
+      statusCode = 201;
+      message = "User registered successfully.";
     }
+
+    const token = jwt.sign({ email, id: userId }, process.env.JWT_SECRET_TOKEN, {
+      expiresIn: process.env.ACCESS_EXPIRY,
+    });
+    const refresh = jwt.sign(
+      { email, id: userId },
+      process.env.REFRESH_TOKEN_SECRET,
+      {
+        expiresIn: process.env.REFRESH_EXPIRY,
+      },
+    );
+
+    await pool.query("UPDATE users SET token = $1 WHERE id = $2", [
+      refresh,
+      userId,
+    ]);
+
+    return res.status(statusCode).json({
+      status_code: statusCode,
+      message,
+      token,
+      refresh,
+    });
   } catch (error) {
     console.log(error);
     return res.status(500).json({
