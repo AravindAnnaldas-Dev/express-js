@@ -73,13 +73,27 @@ export const signIn = async (req, res) => {
         { email, id: user.id },
         process.env.JWT_SECRET_TOKEN,
         {
-          expiresIn: "1h",
+          expiresIn: process.env.ACCESS_EXPIRY,
         },
       );
+      const refresh = jwt.sign(
+        { email, id: user.id },
+        process.env.REFRESH_TOKEN_SECRET,
+        {
+          expiresIn: process.env.REFRESH_EXPIRY,
+        },
+      );
+
+      await pool.query("UPDATE users SET token = $1 WHERE id = $2", [
+        refresh,
+        user.id,
+      ]);
+
       return res.status(200).json({
         status_code: 200,
         message: "Successfully logged in.",
         token,
+        refresh,
       });
     } else {
       return res.status(401).json({ message: "Invalid email or password." });
@@ -135,17 +149,27 @@ export const googleAuth = async (req, res) => {
       }
 
       const token = jwt.sign(
-        { email, id: userId },
+        { email, id: user.id },
         process.env.JWT_SECRET_TOKEN,
         {
-          expiresIn: "1h",
+          expiresIn: process.env.ACCESS_EXPIRY,
         },
       );
+      const refresh = jwt.sign(
+        { email, id: user.id },
+        process.env.REFRESH_TOKEN_SECRET,
+        {
+          expiresIn: process.env.REFRESH_EXPIRY,
+        },
+      );
+
+      await pool.query("INSERT INTO users (token) VALUES ($1)", [refresh]);
 
       return res.status(statusCode).json({
         status_code: statusCode,
         message,
         token,
+        refresh,
       });
     } else {
       return res.status(400).json({
@@ -157,5 +181,29 @@ export const googleAuth = async (req, res) => {
     return res.status(500).json({
       message: "Database Error",
     });
+  }
+};
+
+export const refreshToken = async (req, res) => {
+  const { refresh } = req.body;
+
+  if (!refresh) {
+    return res.status(400).json({ message: "Token invalid." });
+  }
+
+  try {
+    const { email, id } = jwt.verify(refresh, process.env.REFRESH_TOKEN_SECRET);
+
+    const accessToken = jwt.sign({ email, id }, process.env.JWT_SECRET_TOKEN, {
+      expiresIn: process.env.ACCESS_EXPIRY,
+    });
+
+    return res.status(200).json({
+      status_code: 200,
+      message: "Token refreshed successfully.",
+      token: accessToken,
+    });
+  } catch (error) {
+    return res.status(401).json({ message: "Token invalid." });
   }
 };
