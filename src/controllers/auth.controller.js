@@ -5,6 +5,34 @@ import { pool } from "../config/db.js";
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
+const EXPIRY_UNIT_MS = { s: 1000, m: 60000, h: 3600000, d: 86400000 };
+
+function expiryToMs(expiry) {
+  const match = /^(\d+)([smhd])$/.exec(expiry);
+  if (!match) return undefined;
+  return Number(match[1]) * EXPIRY_UNIT_MS[match[2]];
+}
+
+const cookieOptions = (maxAge) => ({
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "lax",
+  maxAge,
+});
+
+function setAuthCookies(res, token, refresh) {
+  res.cookie(
+    "accessToken",
+    token,
+    cookieOptions(expiryToMs(process.env.ACCESS_EXPIRY)),
+  );
+  res.cookie(
+    "refreshToken",
+    refresh,
+    cookieOptions(expiryToMs(process.env.REFRESH_EXPIRY)),
+  );
+}
+
 export const signUp = async (req, res) => {
   const { username, email, password } = req.body;
   if (!username) {
@@ -89,6 +117,8 @@ export const signIn = async (req, res) => {
         user.id,
       ]);
 
+      setAuthCookies(res, token, refresh);
+
       return res.status(200).json({
         status_code: 200,
         message: "Successfully logged in.",
@@ -137,10 +167,9 @@ export const googleAuth = async (req, res) => {
     let statusCode;
     let message;
 
-    const existing = await pool.query(
-      "SELECT id FROM users WHERE email = $1",
-      [email],
-    );
+    const existing = await pool.query("SELECT id FROM users WHERE email = $1", [
+      email,
+    ]);
 
     if (existing.rows[0]) {
       userId = existing.rows[0].id;
@@ -156,9 +185,13 @@ export const googleAuth = async (req, res) => {
       message = "User registered successfully.";
     }
 
-    const token = jwt.sign({ email, id: userId }, process.env.JWT_SECRET_TOKEN, {
-      expiresIn: process.env.ACCESS_EXPIRY,
-    });
+    const token = jwt.sign(
+      { email, id: userId },
+      process.env.JWT_SECRET_TOKEN,
+      {
+        expiresIn: process.env.ACCESS_EXPIRY,
+      },
+    );
     const refresh = jwt.sign(
       { email, id: userId },
       process.env.REFRESH_TOKEN_SECRET,
@@ -171,6 +204,8 @@ export const googleAuth = async (req, res) => {
       refresh,
       userId,
     ]);
+
+    setAuthCookies(res, token, refresh);
 
     return res.status(statusCode).json({
       status_code: statusCode,
@@ -187,7 +222,7 @@ export const googleAuth = async (req, res) => {
 };
 
 export const refreshToken = async (req, res) => {
-  const { refresh } = req.body;
+  const refresh = req.body.refresh || req.cookies.refreshToken;
 
   if (!refresh) {
     return res.status(400).json({ message: "Token invalid." });
@@ -200,6 +235,12 @@ export const refreshToken = async (req, res) => {
       expiresIn: process.env.ACCESS_EXPIRY,
     });
 
+    res.cookie(
+      "accessToken",
+      accessToken,
+      cookieOptions(expiryToMs(process.env.ACCESS_EXPIRY)),
+    );
+
     return res.status(200).json({
       status_code: 200,
       message: "Token refreshed successfully.",
@@ -207,5 +248,23 @@ export const refreshToken = async (req, res) => {
     });
   } catch (error) {
     return res.status(401).json({ message: "Token invalid." });
+  }
+};
+
+export const userLogout = async (req, res) => {
+  const { id } = req.user;
+
+  try {
+    await pool.query("UPDATE users SET token = NULL WHERE id = $1", [id]);
+
+    res.clearCookie("accessToken", cookieOptions());
+    res.clearCookie("refreshToken", cookieOptions());
+
+    return res.status(200).json({
+      message: "Logged out successfully.",
+    });
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({ message: "Database Error." });
   }
 };
